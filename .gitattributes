@@ -1,0 +1,7 @@
+# setup-linux.sh and the dotfiles are consumed on Linux/WSL — CRLF would break
+# them, so pin LF regardless of the cloning machine's core.autocrlf setting.
+*.sh          text eol=lf
+dotfiles/**   text eol=lf
+
+# The PowerShell script is Windows-native; CRLF is conventional there.
+*.ps1         text eol=crlf

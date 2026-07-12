@@ -1,11 +1,3 @@
-# Enable Powerlevel10k instant prompt (must stay at top)
-if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
-  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
-fi
-
-# ── Powerlevel10k Theme ─────────────────────────────────────────────────────
-[[ -f ~/.powerlevel10k/powerlevel10k.zsh-theme ]] && source ~/.powerlevel10k/powerlevel10k.zsh-theme
-
 # ── Plugins ─────────────────────────────────────────────────────────────────
 [[ -f ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh ]] && source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
 [[ -f ~/.zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]] && source ~/.zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
@@ -61,6 +53,5 @@ fi
 # ── PATH additions ─────────────────────────────────────────────────────────
 export PATH="$HOME/.local/bin:$PATH"
 
-# ── Powerlevel10k config ───────────────────────────────────────────────────
-# To customize prompt, run `p10k configure` or edit ~/.p10k.zsh
-[[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
+# ── Starship prompt ────────────────────────────────────────────────────────
+eval "$(starship init zsh)"
