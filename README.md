@@ -59,7 +59,8 @@ After either setup completes, **open a new terminal** to activate the new shell/
 | **PowerShell 7** | Installed via `winget` if not present; script self-relaunches in PS7 automatically |
 | **Git** | Installed via `winget` if not present |
 | **JetBrains Mono Nerd Font** | *Optional (default on)* — pinned release download, SHA256-verified, installed per-user (no admin required) |
-| **Starship** | Installed via `winget` |
+| **Windows Terminal settings** | *Optional (default on)* — sets the default font face to JetBrainsMono Nerd Font and PowerShell 7 as the default profile; `settings.json` is backed up first, only those two keys change, and a post-write validation restores the backup if the file no longer parses |
+| **Starship** | Installed via `winget` (machine-wide MSI — shows a one-time UAC prompt) |
 | **Starship config** | `dotfiles\starship.toml` copied to `%USERPROFILE%\.config\starship.toml` |
 | **PSReadLine 2.2+** | ListView prediction, vim-friendly key bindings |
 | **PowerShell profile** | Managed sentinel block added to `$PROFILE` |

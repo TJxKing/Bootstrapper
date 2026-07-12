@@ -36,7 +36,7 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
         Write-Host "[→]  Relaunching in PowerShell 7..." -ForegroundColor Cyan
         & $pwsh -ExecutionPolicy Bypass -File $PSCommandPath
     } else {
-        Write-Host "[!]  PS7 installed. Open a new terminal and run: pwsh -ExecutionPolicy Bypass -File .\setup-windows.ps1" -ForegroundColor Yellow
+        Write-Host "[!]  PS7 installed. Open a new PowerShell 7 window and re-run the Quick Start block from the repo README." -ForegroundColor Yellow
     }
     exit
 }
@@ -240,12 +240,103 @@ function Install-NerdFont {
     }
 }
 
+# StrictMode-safe helper: does this (possibly missing) object have property $Name?
+# Use the Properties indexer, not `.Properties.Name -contains` — under
+# `Set-StrictMode -Version Latest`, member-enumerating `.Name` over an empty
+# member collection throws "The property 'Name' cannot be found on this object".
+function Test-JsonProperty {
+    param($Object, [string]$Name)
+    return ($null -ne $Object) -and ($null -ne $Object.PSObject.Properties[$Name])
+}
+
+function Set-TerminalConfig {
+    # Deterministic GUID of the Windows.Terminal.PowershellCore (PS7) profile —
+    # identical on every machine, so hardcoding it is safe.
+    $Ps7Guid  = '{574e775e-4f2a-5b96-ac1e-a2962a402336}'
+    $FontFace = 'JetBrainsMono Nerd Font'
+
+    # First existing of: Store stable, Store preview, unpackaged install.
+    $candidates = @(
+        "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
+        "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json"
+        "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json"
+    )
+    $settingsPath = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $settingsPath) {
+        Write-Warn "Windows Terminal settings.json not found — is Terminal installed and launched once? Skipping."
+        return
+    }
+
+    # Parse defensively: never risk corrupting a file we can't read back.
+    try {
+        $json = Get-Content $settingsPath -Raw | ConvertFrom-Json
+    } catch {
+        Write-Warn "Could not parse $settingsPath (comments or invalid JSON?) — skipping to avoid corrupting it."
+        return
+    }
+
+    $backup = "$settingsPath.bak.$(Get-Date -Format 'yyyyMMddHHmmss')"
+    Copy-Item $settingsPath $backup
+    Write-Info "Backed up Terminal settings → $backup"
+
+    # ── defaultProfile → PowerShell 7 ────────────────────────────────────────
+    $curDefault = if (Test-JsonProperty $json 'defaultProfile') { $json.defaultProfile } else { $null }
+    if ($curDefault -eq $Ps7Guid) {
+        Write-Ok "Default profile: PowerShell 7 (already set)"
+    } else {
+        if (Test-JsonProperty $json 'defaultProfile') {
+            $json.defaultProfile = $Ps7Guid
+        } else {
+            $json | Add-Member -NotePropertyName defaultProfile -NotePropertyValue $Ps7Guid
+        }
+        if ($curDefault) { Write-Ok "Default profile: PowerShell 7 (was: $curDefault)" }
+        else             { Write-Ok "Default profile: PowerShell 7" }
+    }
+
+    # ── profiles.defaults.font.face → Nerd Font ──────────────────────────────
+    # Create any missing intermediate objects (StrictMode forbids reading them).
+    if (-not (Test-JsonProperty $json 'profiles')) {
+        $json | Add-Member -NotePropertyName profiles -NotePropertyValue ([pscustomobject]@{})
+    }
+    if (-not (Test-JsonProperty $json.profiles 'defaults')) {
+        $json.profiles | Add-Member -NotePropertyName defaults -NotePropertyValue ([pscustomobject]@{})
+    }
+    if (-not (Test-JsonProperty $json.profiles.defaults 'font')) {
+        $json.profiles.defaults | Add-Member -NotePropertyName font -NotePropertyValue ([pscustomobject]@{})
+    }
+    $curFace = if (Test-JsonProperty $json.profiles.defaults.font 'face') { $json.profiles.defaults.font.face } else { $null }
+    if ($curFace -eq $FontFace) {
+        Write-Ok "Default font face: $FontFace (already set)"
+    } else {
+        if (Test-JsonProperty $json.profiles.defaults.font 'face') {
+            $json.profiles.defaults.font.face = $FontFace
+        } else {
+            $json.profiles.defaults.font | Add-Member -NotePropertyName face -NotePropertyValue $FontFace
+        }
+        if ($curFace) { Write-Ok "Default font face: $FontFace (was: $curFace)" }
+        else          { Write-Ok "Default font face: $FontFace" }
+    }
+
+    # PS7's utf8 encoding is BOM-less; a BOM would break Windows Terminal.
+    $json | ConvertTo-Json -Depth 32 | Set-Content $settingsPath -Encoding utf8
+
+    # Post-write validation: re-parse, and restore the backup if we broke it.
+    try {
+        Get-Content $settingsPath -Raw | ConvertFrom-Json | Out-Null
+        Write-Ok "Windows Terminal settings updated → $settingsPath"
+    } catch {
+        Copy-Item $backup $settingsPath -Force
+        Write-Err "Post-write validation failed — restored backup. Terminal settings left unchanged."
+    }
+}
+
 function Install-Starship {
     if (Get-Command starship -ErrorAction SilentlyContinue) {
         Write-Ok "Starship already installed ($(starship --version | Select-Object -First 1))"
         return
     }
     Write-Info "Installing Starship via winget..."
+    Write-Warn "Starship installs machine-wide (winget MSI) — Windows will show a one-time elevation (UAC) prompt."
     winget install --id Starship.Starship --silent --source winget --accept-package-agreements --accept-source-agreements
     Update-SessionPath
     Write-Ok "Starship installed"
@@ -471,6 +562,7 @@ Test-WingetPrerequisite
 $Steps = @(
     @{ Key = 'git';       Label = 'Git';                          Mandatory = $true;  Default = $true;  Action = { Install-Git } }
     @{ Key = 'font';      Label = 'JetBrains Mono Nerd Font';     Mandatory = $false; Default = $true;  Action = { Install-NerdFont } }
+    @{ Key = 'terminal';  Label = 'Windows Terminal settings';    Mandatory = $false; Default = $true;  Action = { Set-TerminalConfig } }
     @{ Key = 'starship';  Label = 'Starship prompt';              Mandatory = $true;  Default = $true;  Action = { Install-Starship } }
     @{ Key = 'starcfg';   Label = 'Starship config';              Mandatory = $true;  Default = $true;  Action = { Set-StarshipConfig } }
     @{ Key = 'psrl';      Label = 'PSReadLine';                   Mandatory = $true;  Default = $true;  Action = { Install-PSReadLine } }
@@ -549,7 +641,9 @@ foreach ($step in $Steps) {
 }
 Write-Host ""
 Write-Info "Open a new pwsh terminal to activate Starship and PSReadLine settings."
-if ($Selected.Contains('font')) {
+if ($Selected.Contains('terminal')) {
+    Write-Info "Restart Windows Terminal to apply the new font and default profile."
+} elseif ($Selected.Contains('font')) {
     Write-Info "Set font in Windows Terminal: Settings → Profile → Appearance → Font face → JetBrainsMono Nerd Font"
 }
 
